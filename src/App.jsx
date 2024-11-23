@@ -1,5 +1,359 @@
 import React, { useState, useEffect, useRef } from "react";
 import * as Tone from "tone";
+import './App.css';
+//import Keyboard from '../Keyboard';
+//import Sequencer from '../Sequencer';
+
+const App = () => {
+  const [counter, setCounter] = useState(""); // Counter for the UI
+  const [currentNote, setCurrentNote] = useState("C3");
+  const [sequence, setSequence] = useState(Array(8).fill("")); // 8-step sequencer (empty by default)
+  const [sequence2, setSequence2] = useState(Array(8).fill("")); // 8-step sequencer (empty by default)
+  const [isRunning, setIsRunning] = useState(false); // State for transport status
+  const activeStepRef = useRef(0); // Reference for the current step in the sequencer
+  const activeStepRef2 = useRef(0); // Reference for the current step in the sequencer
+  const synthRef = useRef(null); // Reference to the synth object
+  const transport = Tone.getTransport();
+  const [uploadedSample, setUploadedSample] = useState(null); // Stores the uploaded sample
+  const samplerRef = useRef(null); // Ref for the Tone.Sampler
+
+  useEffect(() => {
+    // Initialize the sampler
+    samplerRef.current = new Tone.Sampler().toDestination();
+
+    // Initialize the Synth with a triangle waveform
+    synthRef.current = new Tone.Synth({
+      oscillator: {
+        type: "triangle",
+      },
+    }).toDestination();
+
+    // Cleanup on component unmount
+    return () => {
+      transport.stop();
+      transport.cancel(); // Clear all scheduled events
+      if (synthRef.current) synthRef.current.dispose();
+      if (samplerRef.current) {
+        samplerRef.current.dispose(); // Cleanup sampler on unmount
+      }
+    };
+  }, []);
+
+  const playNote = (note) => {
+    Tone.start(); // Ensure the audio context is running
+    synthRef.current.triggerAttackRelease(note, "8n");
+    //samplerRef.current.triggerAttackRelease(note, "8n");
+  };
+
+  const start = async () => {
+    // Ensure AudioContext is resumed
+    await Tone.start(); 
+    console.log("AudioContext started!");
+  
+    // Reset counter and sequence
+    setCounter(1);
+    //counterRef.current = 1;
+    setIsRunning(true);
+  
+    // Start the sequence and the transport
+    //sequenceRef.current.start(0); // Start at the beginning
+    transport.start();
+  };
+
+  const startSequence = () => {
+    Tone.start(); // Ensure AudioContext is started
+    setCounter(1);
+    activeStepRef.current = 0; // Reset the active step
+    setIsRunning(true);
+
+    // Schedule the transport to run the sequencer
+    transport.scheduleRepeat((time) => {
+      const currentStep = activeStepRef.current;
+      const note = sequence[currentStep];
+      const note2 = sequence2[currentStep];
+
+      // Stop any currently playing note
+      synthRef.current?.triggerRelease();
+
+      samplerRef.current?.triggerRelease();
+
+      // Play the note if the step contains one
+      if (note) {
+        synthRef.current.triggerAttackRelease(note, "8n", time);
+      }
+
+      if (note2) {
+        //play sampler
+      }
+
+      // Update the active step and counter
+      activeStepRef.current = (currentStep + 1) % sequence.length;
+      setCounter(activeStepRef.current + 1); // Update UI for beat count
+    }, "8n"); // Steps align with eighth notes
+
+    transport.start();
+  };
+
+  const stopSequence = () => {
+    setIsRunning(false);
+
+    // Stop transport and clear sequence playback
+    transport.stop();
+    transport.cancel();
+    synthRef.current?.triggerRelease();
+
+    // Reset UI
+    setCounter("");
+    activeStepRef.current = 0;
+  };
+
+  const clearSequence = () => {
+    setSequence(Array(8).fill("")); 
+    setSequence2(Array(8).fill("")); 
+  };
+
+  // const handleFileUpload = (event) => {
+  //   const file = event.target.files[0];
+  //   if (file) {
+  //     const reader = new FileReader();
+  
+  //     reader.onload = async (e) => {
+  //       const audioData = e.target.result;
+  //       try {
+  //         // Create a Tone.AudioBuffer from the audio data
+  //         const buffer = new Tone.AudioBuffer(audioData);
+  
+  //         // Assign the buffer to the sampler
+  //         samplerRef.current.add("C3", buffer);
+  //         setUploadedSample(file.name);
+  //         console.log("Sample loaded successfully!");
+  //       } catch (error) {
+  //         console.error("Error loading audio file:", error);
+  //       }
+  //     };
+  
+    //   reader.readAsArrayBuffer(file); // Read the file as an ArrayBuffer
+    // }
+  // };
+  
+
+  // const playUploadedSample = () => {
+  //   if (samplerRef.current) {
+  //     samplerRef.current.triggerAttackRelease("C3", "4n"); // Play the loaded sample
+  //   }
+  // };
+
+  // const toggleStep = (index) => {
+  //   setSequence((prevSequence) => {
+  //     const newSequence = [...prevSequence];
+  //     newSequence[index] = newSequence[index] === currentNote ? "" : currentNote; // Toggle note
+  //     return newSequence;
+  //   });
+  // };
+
+  const toggleStep = (index) => {
+    const newSequence = [...sequence];
+    newSequence[index] = sequence[index] === "" ? currentNote : "";
+    setSequence(newSequence);
+  };
+
+  const toggleStep2 = (index) => {
+    const newSequence2 = [...sequence2];
+    newSequence2[index] = sequence2[index] === "" ? currentNote : "";
+    setSequence2(newSequence2);
+  };
+
+  return (
+    <div
+      style={{
+        textAlign: "center",
+        padding: "20px",
+        backgroundColor: "#121212",
+        color: "#fff",
+      }}
+    >
+      <h1>OtterSong</h1>
+      <div>
+  <h2>Upload an Audio File</h2>
+  {/* <label for="file-upload">
+    Choose File (eventually)
+  </label>
+  <input
+    id="file-upload"
+    type="file"
+    accept="audio/*"
+
+    /> */}
+  <p id="uploaded-file-name" >
+    No file selected
+  </p>
+</div>
+
+      <p style={{ fontSize: "24px" }}>Current Beat: {counter}</p>
+      <p style={{ fontSize: "24px" }}>Current Note: {currentNote}</p>
+      <button
+        onClick={startSequence}
+        style={{
+          padding: "10px 20px",
+          margin: "10px",
+          backgroundColor: "#4caf50",
+          color: "white",
+          border: "none",
+          borderRadius: "5px",
+          cursor: "pointer",
+        }}
+        disabled={isRunning}
+      >
+        Start
+      </button>
+      <button
+        onClick={stopSequence}
+        style={{
+          padding: "10px 20px",
+          margin: "10px",
+          backgroundColor: "#f44336",
+          color: "white",
+          border: "none",
+          borderRadius: "5px",
+          cursor: "pointer",
+        }}
+        disabled={!isRunning}
+      >
+        Stop
+      </button>
+      <button
+        onClick={clearSequence}
+        style={{
+          padding: "10px 20px",
+          margin: "10px",
+          backgroundColor: "#008CBA",
+          color: "white",
+          border: "none",
+          borderRadius: "5px",
+          cursor: "pointer",
+        }}
+      >
+        Clear Sequence
+      </button>
+      <div style={styles.keyboard}>
+        {[
+          "C2",
+          "D2",
+          "E2",
+          "F2",
+          "G2",
+          "A2",
+          "B2",
+          "C3",
+          "D3",
+          "E3",
+          "F3",
+          "G3",
+          "A3",
+          "B3",
+          "C4",
+        ].map((note) => (
+          <button
+            key={note}
+            onClick={() => {
+              setCurrentNote(note);
+              playNote(note); // Play immediately
+            }}
+            style={{
+              ...styles.key,
+              ...(currentNote === note ? styles.activeKey : {}),
+            }}
+          >
+            {note}
+          </button>
+        ))}
+      </div>
+      
+      <div style={styles.stepSequencer}>
+        
+        {sequence.map((stepNote, index) => (
+          <button
+            key={index}
+            onClick={() => toggleStep(index)}
+            style={{
+              ...styles.step,
+              ...(activeStepRef.current === index ? styles.activeStep : {}),
+              ...(stepNote ? styles.noteStep : {}),
+            }}
+          >
+            {stepNote || ""}
+          </button>
+        ))}
+      </div>
+      <div style={styles.stepSequencer}>
+        {sequence2.map((stepNote2, index2) => (
+          <button
+            key={index2}
+            onClick={() => toggleStep2(index2)}
+            style={{
+              ...styles.step,
+              ...(activeStepRef.current === index2 ? styles.activeStep : {}),
+              ...(stepNote2 ? styles.noteStep : {}),
+            }}
+          >
+            {stepNote2 || ""}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const styles = {
+  stepSequencer: {
+    display: "grid",
+    gridTemplateColumns: "repeat(8, 1fr)",
+    gap: "0.5rem",
+    marginBottom: "1rem",
+  },
+  keyboard: {
+    display: "grid",
+    gridTemplateColumns: "repeat(15, 1fr)",
+    gap: "0.5rem",
+    marginBottom: "1rem",
+  },
+  key: {
+    padding: "1rem",
+    backgroundColor: "#444",
+    border: "1px solid #666",
+    borderRadius: "4px",
+    color: "#fff",
+    fontSize: "0.9rem",
+    cursor: "pointer",
+  },
+  activeKey: {
+    backgroundColor: "#005f99",
+  },
+  step: {
+    padding: "1rem",
+    backgroundColor: "#666",
+    border: "1px solid #999",
+    borderRadius: "4px",
+    color: "#fff",
+    textAlign: "center",
+    fontSize: "1rem",
+    cursor: "pointer",
+  },
+  activeStep: {
+    backgroundColor: "#ff6347", // Bright color for the active step
+  },
+  noteStep: {
+    backgroundColor: "#1e90ff", // Highlighted color for steps with notes
+  },
+};
+
+export default App;
+
+
+/*
+
+import React, { useState, useEffect, useRef } from "react";
+import * as Tone from "tone";
 
 const App = () => {
   const [counter, setCounter] = useState(""); // Counter for the UI
@@ -9,6 +363,7 @@ const App = () => {
   const activeStepRef = useRef(0); // Reference for the current step in the sequencer
   const synthRef = useRef(null); // Reference to the synth object
   const transport = Tone.getTransport();
+  const counterRef = useRef(1);
 
   useEffect(() => {
     // Initialize the Synth with a triangle waveform
@@ -27,11 +382,147 @@ const App = () => {
   }, []);
 
   const playNote = (note) => {
-    Tone.start(); // Ensure the audio context is running
+    if (!Tone.start()){
+      Tone.start(); // Ensure the audio context is running
+    }
     synthRef.current.triggerAttackRelease(note, "8n");
   };
 
-  const startSequence = () => {
+  const [audioWarning, setAudioWarning] = useState(false);
+
+const start = async () => {
+  if (Tone.getContext.state !== "running") {
+    setAudioWarning(true);
+    await Tone.start();
+    setAudioWarning(false);
+  }
+
+  console.log("AudioContext started!");
+
+  setCounter(1);
+  //counterRef.current = 1;
+  setIsRunning(true);
+  //sequenceRef.current.start(0);
+  transport.start();
+};
+
+return (
+  <div>
+    {audioWarning && <p style={{ color: "red" }}>AudioContext was suspended. Click Start to activate audio.</p>}
+    return (
+    <div
+      style={{
+        textAlign: "center",
+        padding: "20px",
+        backgroundColor: "#121212",
+        color: "#fff",
+      }}
+    >
+      <h1>8-Step Sequencer</h1>
+      <p style={{ fontSize: "24px" }}>Current Beat: {counter}</p>
+      <p style={{ fontSize: "24px" }}>Current Note: {currentNote}</p>
+      <button
+        onClick={start}
+        style={{
+          padding: "10px 20px",
+          margin: "10px",
+          backgroundColor: "#4caf50",
+          color: "white",
+          border: "none",
+          borderRadius: "5px",
+          cursor: "pointer",
+        }}
+        disabled={isRunning}
+      >
+        Start
+      </button>
+      <button
+        onClick={stopSequence}
+        style={{
+          padding: "10px 20px",
+          margin: "10px",
+          backgroundColor: "#f44336",
+          color: "white",
+          border: "none",
+          borderRadius: "5px",
+          cursor: "pointer",
+        }}
+        disabled={!isRunning}
+      >
+        Stop
+      </button>
+      <button
+        onClick={clearSequence}
+        style={{
+          padding: "10px 20px",
+          margin: "10px",
+          backgroundColor: "#008CBA",
+          color: "white",
+          border: "none",
+          borderRadius: "5px",
+          cursor: "pointer",
+        }}
+      >
+        Clear Sequence
+      </button>
+      <div style={styles.keyboard}>
+        {[
+          "C2",
+          "D2",
+          "E2",
+          "F2",
+          "G2",
+          "A2",
+          "B2",
+          "C3",
+          "D3",
+          "E3",
+          "F3",
+          "G3",
+          "A3",
+          "B3",
+          "C4",
+        ].map((note) => (
+          <button
+            key={note}
+            onClick={() => {
+              setCurrentNote(note);
+              playNote(note); // Play immediately
+            }}
+            style={{
+              ...styles.key,
+              ...(currentNote === note ? styles.activeKey : {}),
+            }}
+          >
+            {note}
+          </button>
+        ))}
+      </div>
+      <div style={styles.stepSequencer}>
+        {sequence.map((stepNote, index) => (
+          <button
+            key={index}
+            onClick={() => toggleStep(index)}
+            style={{
+              ...styles.step,
+              ...(activeStepRef.current === index ? styles.activeStep : {}),
+              ...(stepNote ? styles.noteStep : {}),
+            }}
+          >
+            {stepNote || ""}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+  </div>
+);
+
+  const startSequence = async () => {
+    if (Tone.getContext.useState !== "running") {
+
+    }
     Tone.start(); // Ensure AudioContext is started
     setCounter(1);
     activeStepRef.current = 0; // Reset the active step
